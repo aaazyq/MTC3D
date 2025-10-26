@@ -30,23 +30,27 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-def crop_tumor_region(ct_img, tumor_mask, output_shape=(32, 32)):
+def crop_tumor_region(ct_img, tumor_mask, output_shape=(48, 48)):
     """
     裁切肿瘤区域并将非肿瘤区域置黑，同时返回裁切索引信息
     :param ct_img: CT图像，形状为 (H, W, Z) = (512, 512, N)
     :param tumor_mask: 肿瘤掩码，形状同上，1表示肿瘤，0表示非肿瘤
-    :param output_shape: 输出图像的(H, W) = (32, 32)
+    :param output_shape: 输出图像的(H, W) = (48, 48)
     :return: 
         cropped_img: 处理后的图像，形状为 (output_H, output_W, M)，M≤N
         tumor_crop_mask: 对应的掩码
         crop_info: 包含裁切索引信息的字典
     """
+    print("ct_img shape:", ct_img.shape)
+    print("tumor_mask shape:", tumor_mask.shape)
     # 确认输入维度顺序正确 (H, W, Z)
     if len(ct_img.shape) != 3:
         raise ValueError(f"输入图像必须是3维 (H, W, Z)，但得到 {ct_img.shape}")
     
     # 找到肿瘤区域的坐标（Y=高度, X=宽度, Z=深度）
     y_coords, x_coords, z_coords = np.where(tumor_mask == 1)
+    # x_coords, y_coords, z_coords = np.where(tumor_mask == 1)
+
     
     if len(y_coords) == 0:
         # 无肿瘤区域，返回全黑图像
@@ -121,28 +125,29 @@ def crop_tumor_region(ct_img, tumor_mask, output_shape=(32, 32)):
     )
     
     # 将非肿瘤区域置为黑色
-    cropped_img[np.where(tumor_crop_mask == 0)] = 0.0
+    # cropped_img[np.where(tumor_crop_mask == 0)] = 0.0
     
     # 构建裁切信息字典
     crop_info = {
         'has_tumor': True,
-        'original_shape': ct_img.shape,
-        'output_shape': cropped_img.shape,
+        'original_shape': tuple(int(d) for d in ct_img.shape),
+        'output_shape': tuple(int(d) for d in cropped_img.shape),
         'bounding_box': {
-            'y_range': (y_start, y_end),
-            'x_range': (x_start, x_end),
-            'z_range': (z_start, z_end),
-            'tumor_center': (y_center, x_center),
-            'tumor_bbox': (y_min, y_max, x_min, x_max, z_min, z_max)
+            'y_range': (int(y_start), int(y_end)),
+            'x_range': (int(x_start), int(x_end)),
+            'z_range': (int(z_start), int(z_end)),
+            'tumor_center': (int(y_center), int(x_center)),
+            'tumor_bbox': (int(y_min), int(y_max), int(x_min), int(x_max), int(z_min), int(z_max))
         },
-        'z_slices': z_slices,  # 保留的Z轴切片索引列表
+        'z_slices': [int(slice_idx) for slice_idx in z_slices],  # 保留的Z轴切片索引列表
         'padding': {
-            'y': pad_y,
-            'x': pad_x
+            'y': int(pad_y),
+            'x': int(pad_x)
         },
-        'tumor_volume': len(y_coords)  # 肿瘤体素数量
+        'tumor_volume': int(len(y_coords))  # 肿瘤体素数量
     }
-    
+
+
     return cropped_img, tumor_crop_mask, crop_info
 
 
@@ -197,6 +202,9 @@ class MedicalDataLoader:
         nii_img = nib.load(mask_file)
         mask_data = nii_img.get_fdata().astype(np.uint8)  # 确保掩码为整数类型
 
+        # mask_data = np.flipud(mask_data) ### TODO: 上下翻转
+
+
         return images, mask_data
 
     def find_mask_file(self, patient_name):
@@ -219,6 +227,7 @@ class MedicalDataLoader:
         patient_names = [name for name in os.listdir(self.patient_folder) if os.path.isdir(os.path.join(self.patient_folder, name))]
         patient_names = patient_names[:self.max_patients]  # Limit number of patients loaded
         patient_names.sort()  # Ensure consistent order
+        
         print(patient_names)
         for patient_id, patient_name in enumerate(patient_names):
             if patient_name in ["heweifu", "lvrongxi", "wangshuihua", "zanghuaixiang", "zhuqingyu"]:
@@ -258,7 +267,7 @@ class EnhancedMedicalDataLoader(MedicalDataLoader):
 
 
 # 将掩码应用到图像上
-def apply_mask_to_images(images, mask, output_folder):
+def save_full_images(images, mask, output_folder):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)  # 创建输出文件夹
 
@@ -271,16 +280,36 @@ def apply_mask_to_images(images, mask, output_folder):
         # 获取当前切片的掩码
         mask_slice = mask[:, :, i]
         mask_num = np.sum(mask_slice == 1)
-        # print(f"Processing slice {i}, mask pixel count: {mask_num}")
-        # 将掩码部分标记为红色
-        img_rgb[mask_slice == 1] = [0, 0, 255]  # 红色 (BGR 格式)
+        if mask_num > 0:
+            # print(f"Processing slice {i}, mask pixel count: {mask_num}")
+            # 将掩码部分标记为红色
+            # img_rgb[mask_slice == 1] = [0, 0, 255]  # 红色 (BGR 格式)
 
-        # 保存标记后的图像
-        output_path = os.path.join(output_folder, f"image_{i:03d}.png")
-        # print("rgb")
-        # print(img_rgb.min(), img_rgb.max(), img_rgb.dtype)
-        cv2.imwrite(output_path, img_rgb)  # 确保数据类型为 uint8
-        # print(f"Saved: {output_path}")
+            # 保存标记后的图像
+            output_path = os.path.join(output_folder, f"image_{i:03d}.png")
+            # print("rgb")
+            # print(img_rgb.min(), img_rgb.max(), img_rgb.dtype)
+            cv2.imwrite(output_path, img_rgb)  # 确保数据类型为 uint8
+            # print(f"Saved: {output_path}")
+
+def apply_mask_on_images(images, mask, images_folder, result_folder):
+    os.makedirs(result_folder, exist_ok=True)  # 创建输出文件夹
+
+    for i, img in enumerate(images):
+        # 获取当前切片的掩码
+        mask_slice = mask[:, :, i]
+        mask_num = np.sum(mask_slice == 1)
+        if mask_num > 0:
+            img_path = os.path.join(images_folder, f"image_{i:03d}.png")
+            full_img = plt.imread(img_path)
+            original_img = full_img.copy()
+            full_img[mask_slice == 1] = [1,0,0]
+            concatenated_image = np.hstack((original_img, full_img))
+            new_img_path = os.path.join(result_folder, f"image_{i:03d}.png")
+            plt.imsave(new_img_path, concatenated_image)
+
+
+            
 
 def save_mask_slices_cv2(mask, save_dir, z_slices):
     """
@@ -307,10 +336,77 @@ def save_mask_slices_cv2(mask, save_dir, z_slices):
     
     print(f'总共保存了 {num_slices} 个切片')
 
+def save_cropped_img_plt(result, save_dir, z_slices):
+    """
+    使用OpenCV保存mask切片（文件更小，速度更快）
+    :param mask: 3D mask数组
+    :param save_dir: 保存目录
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    assert len(z_slices) == result.shape[2], "z_slices长度必须与mask的第三维度匹配"
+    num_slices = result.shape[2]
+    
+    for slice_idx in range(num_slices):
+        z_slice = z_slices[slice_idx]
+        # 获取当前切片
+        slice_data = result[:, :, slice_idx]
+        
+        # 保存图片
+        save_path = os.path.join(save_dir, f'img_slice_{z_slice:03d}.png')
+        plt.imsave(save_path, slice_data, cmap='gray')
+        
+        print(f'已保存: {save_path}')
+    
+    print(f'总共保存了 {num_slices} 个切片')
+
+def concatenate_and_save_images(img1, img2, z_slices, save_path, convert_img2_to_rgba=False):
+    """
+    水平拼接两张尺寸一样的图并保存
+    :param img1: 第一张图像
+    :param img2: 第二张图像
+    :param save_path: 保存路径
+    """
+    # # 确保两张图片的尺寸相同
+    # print(f"img1 shape: {img1.shape}, img2 shape: {img2.shape}")
+    # 将灰度图像转换为RGBA图像
+    if convert_img2_to_rgba:
+        img2_rgba = np.stack((img2,) * 3, axis=-1)  # 复制灰度值到RGB通道
+        img2_rgba = np.pad(img2_rgba, ((0, 0), (0, 0), (0, 1)), mode='constant', constant_values=1)  # 添加alpha通道，值为255
+        img2 = img2_rgba
+        
+    # 水平拼接图片
+    concatenated_image = np.hstack((img1, img2))
+    
+    # 保存拼接后的图片
+    plt.imsave(save_path, concatenated_image, cmap='gray')
+    
+    print(f'已保存拼接后的图片: {save_path}')
+
+def concatenate_img_and_mask(img_folder, mask_folder, save_path, z_slices):
+    """
+    水平拼接图像和掩码并保存
+    :param img: 图像
+    :param mask: 掩码
+    :param save_path: 保存路径
+    """
+    # 确保图像和掩码的尺寸相同
+    os.makedirs(save_path, exist_ok=True)
+
+    
+    for slice_idx in range(len(z_slices)):
+        z_slice = z_slices[slice_idx]
+        img_save_path = os.path.join(img_folder, f'img_slice_{z_slice:03d}.png')
+        mask_save_path = os.path.join(mask_folder, f'mask_slice_{z_slice:03d}.png')
+        img = plt.imread(img_save_path)
+        mask = plt.imread(mask_save_path)
+        concatenated_save_path = os.path.join(save_path, f'concat_slice_{z_slice:03d}.png')
+        concatenate_and_save_images(img, mask, z_slices, concatenated_save_path, convert_img2_to_rgba=True)
+
+
 patient_folder = "/Users/yangzidong/Desktop/yuqing/medical/202510/MTC_3D/MTC patient"
 mask_folder = "/Users/yangzidong/Desktop/yuqing/medical/202510/MTC_3D/tumor3d"
 # max_patients = 10
-dataloader = EnhancedMedicalDataLoader(patient_folder, mask_folder)
+dataloader = EnhancedMedicalDataLoader(patient_folder, mask_folder, max_patients=10)
 data_cache = dataloader.load_and_cache_data()
 
 
@@ -320,23 +416,34 @@ for patient_name in tqdm(patient_names,
                          total=len(patient_names),
                          ncols=100):  # 进度条宽度
     # 保存原始大小的图像
-    try:
-        apply_mask_to_images(images = data_cache[patient_name][0], 
+    # try:
+    if True:
+        save_full_images(images = data_cache[patient_name][0], 
                             mask = data_cache[patient_name][1], 
                             output_folder = f"images_vis/{patient_name}")
 
+        apply_mask_on_images(images = data_cache[patient_name][0], 
+                             mask = data_cache[patient_name][1], 
+                             images_folder= f"images_vis/{patient_name}", 
+                             result_folder= f"images_mask_vis/{patient_name}")
         # 裁切肿瘤区域并将非肿瘤区域置黑
         result, tumor_crop_mask, cropped_info = crop_tumor_region(ct_img = np.array(data_cache[patient_name][0]).transpose((1,2,0)), 
                         tumor_mask = data_cache[patient_name][1], 
-                        output_shape=(32, 32))
+                        output_shape=(48, 48))
 
         # 保存 cropped mask （黑白）
         save_mask_slices_cv2(tumor_crop_mask, f"cropped_mask/{patient_name}", cropped_info['z_slices'])
-
+        save_cropped_img_plt(result, f"cropped_img/{patient_name}", cropped_info['z_slices'])
+        concatenate_img_and_mask(f"cropped_img/{patient_name}", f"cropped_mask/{patient_name}", f"concat_img_mask/{patient_name}", cropped_info['z_slices'])
         # 保存 cropped 图像至 npz
         os.makedirs('cropped_data', exist_ok=True)
         np.savez(f'cropped_data/{patient_name}.npz', data=result)
-    except Exception as e:
-        print(f"Error load {patient_name}: {e}")
+        print("cropped_info", cropped_info)
+        import json
+        os.makedirs('cropped_info', exist_ok=True)
+        with open(f'cropped_info/{patient_name}_info.json', 'w') as f:
+            json.dump(cropped_info, f, indent=4)
+    # except Exception as e:
+    #     print(f"Error load {patient_name}: {e}")
 
 
