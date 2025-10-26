@@ -154,7 +154,15 @@ def read_dcm_sequence(folder_path):
     images = []
     for file in dcm_files:
         dcm_data = pydicom.dcmread(file)
-        images.append(dcm_data.pixel_array.astype('>u2'))
+        try:
+            pixel_data = dcm_data.pixel_array.astype('>u2')
+            # pixel_data = np.zeros((512, 512)).astype('>u2')
+            # print(pixel_data.min(), pixel_data.max(), pixel_data.dtype, pixel_data.shape)
+        except Exception as e:
+            print(f"Error reading {file}: {e}")
+            pixel_data = np.zeros((512, 512)).astype('>u2')
+                    
+        images.append(pixel_data)
     return images
 
 class MedicalDataLoader:
@@ -212,9 +220,11 @@ class MedicalDataLoader:
         patient_names = patient_names[:self.max_patients]  # Limit number of patients loaded
         patient_names.sort()  # Ensure consistent order
         print(patient_names)
-        for patient_name in patient_names:
+        for patient_id, patient_name in enumerate(patient_names):
+            if patient_name in ["heweifu", "lvrongxi", "wangshuihua", "zanghuaixiang", "zhuqingyu"]:
+                continue
             patient_name = patient_name.lower()
-            print(f"Loading data for patient: {patient_name}")
+            print(f"{patient_id} Loading data for patient: {patient_name}")
             images, mask = self.load_patient_data(patient_name)
             data[patient_name] = (images, mask)
         return data
@@ -255,7 +265,7 @@ def apply_mask_to_images(images, mask, output_folder):
     for i, img in enumerate(images):
         # 将 DICOM 图像转换为 RGB 格式
         # print("img")
-        print(img.min(), img.max(), img.dtype)
+        # print(img.min(), img.max(), img.dtype)
         img_rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
         # 获取当前切片的掩码
@@ -268,9 +278,9 @@ def apply_mask_to_images(images, mask, output_folder):
         # 保存标记后的图像
         output_path = os.path.join(output_folder, f"image_{i:03d}.png")
         # print("rgb")
-        print(img_rgb.min(), img_rgb.max(), img_rgb.dtype)
+        # print(img_rgb.min(), img_rgb.max(), img_rgb.dtype)
         cv2.imwrite(output_path, img_rgb)  # 确保数据类型为 uint8
-        print(f"Saved: {output_path}")
+        # print(f"Saved: {output_path}")
 
 def save_mask_slices_cv2(mask, save_dir, z_slices):
     """
@@ -310,19 +320,23 @@ for patient_name in tqdm(patient_names,
                          total=len(patient_names),
                          ncols=100):  # 进度条宽度
     # 保存原始大小的图像
-    apply_mask_to_images(images = data_cache[patient_name][0], 
-                        mask = data_cache[patient_name][1], 
-                        output_folder = f"images_vis/{patient_name}")
+    try:
+        apply_mask_to_images(images = data_cache[patient_name][0], 
+                            mask = data_cache[patient_name][1], 
+                            output_folder = f"images_vis/{patient_name}")
 
-    # 裁切肿瘤区域并将非肿瘤区域置黑
-    result, tumor_crop_mask, cropped_info = crop_tumor_region(ct_img = np.array(data_cache[patient_name][0]).transpose((1,2,0)), 
-                    tumor_mask = data_cache[patient_name][1], 
-                    output_shape=(32, 32))
+        # 裁切肿瘤区域并将非肿瘤区域置黑
+        result, tumor_crop_mask, cropped_info = crop_tumor_region(ct_img = np.array(data_cache[patient_name][0]).transpose((1,2,0)), 
+                        tumor_mask = data_cache[patient_name][1], 
+                        output_shape=(32, 32))
 
-    # 保存 cropped mask （黑白）
-    save_mask_slices_cv2(tumor_crop_mask, f"cropped_mask/{patient_name}", cropped_info['z_slices'])
+        # 保存 cropped mask （黑白）
+        save_mask_slices_cv2(tumor_crop_mask, f"cropped_mask/{patient_name}", cropped_info['z_slices'])
 
-    # 保存 cropped 图像至 npz
-    os.makedirs('cropped_data', exist_ok=True)
-    np.savez(f'cropped_data/{patient_name}.npz', data=result)
+        # 保存 cropped 图像至 npz
+        os.makedirs('cropped_data', exist_ok=True)
+        np.savez(f'cropped_data/{patient_name}.npz', data=result)
+    except Exception as e:
+        print(f"Error load {patient_name}: {e}")
+
 
