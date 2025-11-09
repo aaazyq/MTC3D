@@ -319,6 +319,8 @@ def visualize_cam(model, dataloader, device, save_dir='cam_results', num_samples
             break
 
         images = batch['image'].to(device)
+        masks = batch['mask'].to(device)
+
         labels = batch['label'].to(device)
         patient_ids = batch['patient_id']
 
@@ -339,6 +341,7 @@ def visualize_cam(model, dataloader, device, save_dir='cam_results', num_samples
 
             # 处理单个图像
             single_image = images[i:i+1].clone()
+            single_mask = masks[i:i+1].clone()
 
             # 生成CAM
             # try:
@@ -348,6 +351,7 @@ def visualize_cam(model, dataloader, device, save_dir='cam_results', num_samples
                     if cam is not None:
                         _plot_cam(
                             image=single_image.squeeze(0),  # 移除批次维度
+                            mask=single_mask.squeeze(0),  # 使用原图作为mask
                             cam=cam,
                             patient_id=patient_id,
                             true_label=true_label,
@@ -380,6 +384,7 @@ def visualize_shap(model, dataloader, device, save_dir='shap_results', num_sampl
             break
 
         images = batch['image'].to(device)
+        masks = batch['mask'].to(device)
         labels = batch['label'].to(device)
         patient_ids = batch['patient_id']
 
@@ -400,6 +405,8 @@ def visualize_shap(model, dataloader, device, save_dir='shap_results', num_sampl
 
             # 处理单个图像
             single_image = images[i:i+1].clone()
+            single_mask = masks[i:i+1].clone()
+            print(single_image.shape, single_mask.shape)
 
             # 生成SHAP值
             # try:
@@ -408,6 +415,7 @@ def visualize_shap(model, dataloader, device, save_dir='shap_results', num_sampl
                 if shap_values is not None:
                     _plot_shap(
                         image=single_image.squeeze(0),  # 移除批次维度
+                        mask=single_mask.squeeze(0),  # 使用原图作为mask
                         shap_values=shap_values[0] if len(shap_values.shape) > 1 else shap_values,
                         patient_id=patient_id,
                         true_label=true_label,
@@ -784,7 +792,7 @@ def save_heatmaps(grad_cam, images, labels, patient_ids, epoch, save_dir):
             print(f"生成热图时出错 (患者 {patient_ids[i]}): {e}")
             continue
 
-def _plot_cam(image, cam, patient_id, true_label, pred_label, prob_high_risk, save_dir, sample_idx):
+def _plot_cam(image, mask, cam, patient_id, true_label, pred_label, prob_high_risk, save_dir, sample_idx):
     """绘制CAM可视化图"""
     # try:
     if True:
@@ -792,6 +800,11 @@ def _plot_cam(image, cam, patient_id, true_label, pred_label, prob_high_risk, sa
         image = image[0]
         slice_idx = image.shape[0] // 2
         image_slice = image[slice_idx].cpu().numpy()
+
+        mask = mask[0]
+        mask_slice = np.int64(mask[slice_idx].cpu().numpy())
+        # print(mask_slice)
+        print("cam",(image_slice == 0).sum(), (mask_slice == 0).sum())
 
         # 处理CAM切片
         cam_slice = cam[slice_idx] if cam is not None else np.zeros_like(image_slice)
@@ -811,6 +824,8 @@ def _plot_cam(image, cam, patient_id, true_label, pred_label, prob_high_risk, sa
             plt.colorbar(im2, ax=ax2)
 
         # CAM叠加
+        image_slice[mask_slice == 0] = -1.0
+
         ax3.imshow(image_slice, cmap='gray')
         if cam is not None:
             ax3.imshow(cam_slice, cmap='jet', alpha=0.5)
@@ -829,7 +844,7 @@ def _plot_cam(image, cam, patient_id, true_label, pred_label, prob_high_risk, sa
     # except Exception as e:
     #     print(f"绘制CAM可视化时出错: {e}")
 
-def _plot_shap(image, shap_values, patient_id, true_label, pred_label, prob_high_risk, save_dir, sample_idx):
+def _plot_shap(image, mask, shap_values, patient_id, true_label, pred_label, prob_high_risk, save_dir, sample_idx):
     """绘制SHAP可视化图"""
     # try:
     if True:
@@ -837,6 +852,11 @@ def _plot_shap(image, shap_values, patient_id, true_label, pred_label, prob_high
         image = image[0]
         slice_idx = image.shape[0] // 2
         image_slice = image[slice_idx].cpu().numpy()
+
+        mask = mask[0]
+        mask_slice = np.int64(mask[slice_idx].cpu().numpy())
+        # print(mask_slice)
+        print((image_slice == 0).sum(), (mask_slice == 0).sum())
 
         # 处理SHAP值
         if isinstance(shap_values, np.ndarray):
@@ -877,6 +897,7 @@ def _plot_shap(image, shap_values, patient_id, true_label, pred_label, prob_high
         plt.colorbar(im2, ax=ax2)
 
         # SHAP叠加
+        shap_directional[mask_slice == 0] = -1.0
         ax3.imshow(image_slice, cmap='gray')
         ax3.imshow(shap_directional, cmap='bwr', alpha=0.5, vmin=-1, vmax=1)
         ax3.set_title('SHAP Overlay\nRisk Attribution')
