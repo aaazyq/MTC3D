@@ -3,8 +3,8 @@
 import os
 
 # %%
-cropped_mask = os.listdir("/Users/yangzidong/Desktop/yuqing/medical/202510/code_github/cropped_mask")
-images_vis = os.listdir("/Users/yangzidong/Desktop/yuqing/medical/202510/code_github/images_vis/")
+cropped_mask = os.listdir("/Users/yangzidong/Desktop/yuqing/medical/202510/code_github/data/cropped_mask")
+images_vis = os.listdir("/Users/yangzidong/Desktop/yuqing/medical/202510/code_github/data/images_vis/")
 
 
 # %%
@@ -31,7 +31,11 @@ def name_to_pinyin(name):
 data['name'] = data['姓名'].apply(name_to_pinyin)
 
 # Convert '病理分级' to binary (0/1)
-data['level'] = data['病理分级'].apply(lambda x: 1 if x == '高级别' else 0)
+# data['level'] = data['病理分级'].apply(lambda x: 1 if x == '高级别' else 0)
+
+# none=1-> level=0, none=0-> level=1
+data["level"] = 1
+data.loc[data["none"] == 1, "level"] = 0.0
 
 # 多音字
 data.loc[44, "name"] = "adinaadejiang"
@@ -42,7 +46,7 @@ data.loc[246, "name"] = "zhangzhaohui"
 data.loc[282, "name"] = "zengfeng"
 
 # Display the updated DataFrame head
-display(data[['姓名', '病理分级','name', 'level']].head())
+# display(data[['姓名', '病理分级','name', 'level']].head())
 
 # %%
 data["level"].value_counts()
@@ -68,4 +72,6 @@ for name in cropped_mask:
     if name not in data["name"].tolist():
         print(name)
 
+final_data = cleaned_data[['姓名', 'none','name', 'level']]
 
+final_data.to_csv("/Users/yangzidong/Desktop/yuqing/medical/202510/code_github/data/cleaned_data_202511.csv", index=False)

@@ -202,8 +202,10 @@ class MedicalDataLoader:
         nii_img = nib.load(mask_file)
         mask_data = nii_img.get_fdata().astype(np.uint8)  # 确保掩码为整数类型
 
+        ### TODO: 预处理掩码，不确定是否需要进行以下步骤
         # mask_data = np.flipud(mask_data) ### TODO: 上下翻转
-
+        # mask_data = np.fliplr(mask_data) ### TODO: 左右翻转
+        # mask_data = mask_data[:,:,::-1] ### TODO: 前后翻转
 
         return images, mask_data
 
@@ -403,47 +405,51 @@ def concatenate_img_and_mask(img_folder, mask_folder, save_path, z_slices):
         concatenate_and_save_images(img, mask, z_slices, concatenated_save_path, convert_img2_to_rgba=True)
 
 
-patient_folder = "/Users/yangzidong/Desktop/yuqing/medical/202510/MTC_3D/MTC patient"
-mask_folder = "/Users/yangzidong/Desktop/yuqing/medical/202510/MTC_3D/tumor3d"
-# max_patients = 10
-dataloader = EnhancedMedicalDataLoader(patient_folder, mask_folder, max_patients=10)
-data_cache = dataloader.load_and_cache_data()
+if __name__ == '__main__':
+    # patient_folder = "/Users/yangzidong/Desktop/yuqing/medical/202510/MTC_3D/MTC patient"
+    # mask_folder = "/Users/yangzidong/Desktop/yuqing/medical/202510/MTC_3D/tumor3d"
+
+    patient_folder = "/Users/yangzidong/Desktop/yuqing/medical/202510/patient3"
+    mask_folder = "/Users/yangzidong/Desktop/yuqing/medical/202510/patient3"
+    # max_patients = 10
+    dataloader = EnhancedMedicalDataLoader(patient_folder, mask_folder, max_patients=3)
+    data_cache = dataloader.load_and_cache_data()
 
 
-patient_names = list(data_cache.keys())
-for patient_name in tqdm(patient_names, 
-                         desc="处理患者数据", 
-                         total=len(patient_names),
-                         ncols=100):  # 进度条宽度
-    # 保存原始大小的图像
-    # try:
-    if True:
-        save_full_images(images = data_cache[patient_name][0], 
-                            mask = data_cache[patient_name][1], 
-                            output_folder = f"images_vis/{patient_name}")
+    patient_names = list(data_cache.keys())
+    for patient_name in tqdm(patient_names, 
+                            desc="处理患者数据", 
+                            total=len(patient_names),
+                            ncols=100):  # 进度条宽度
+        # 保存原始大小的图像
+        # try:
+        if True:
+            save_full_images(images = data_cache[patient_name][0], 
+                                mask = data_cache[patient_name][1], 
+                                output_folder = f"images_vis/{patient_name}")
 
-        apply_mask_on_images(images = data_cache[patient_name][0], 
-                             mask = data_cache[patient_name][1], 
-                             images_folder= f"images_vis/{patient_name}", 
-                             result_folder= f"images_mask_vis/{patient_name}")
-        # 裁切肿瘤区域并将非肿瘤区域置黑
-        result, tumor_crop_mask, cropped_info = crop_tumor_region(ct_img = np.array(data_cache[patient_name][0]).transpose((1,2,0)), 
-                        tumor_mask = data_cache[patient_name][1], 
-                        output_shape=(48, 48))
+            apply_mask_on_images(images = data_cache[patient_name][0], 
+                                mask = data_cache[patient_name][1], 
+                                images_folder= f"images_vis/{patient_name}", 
+                                result_folder= f"images_mask_vis/{patient_name}")
+            # 裁切肿瘤区域并将非肿瘤区域置黑
+            result, tumor_crop_mask, cropped_info = crop_tumor_region(ct_img = np.array(data_cache[patient_name][0]).transpose((1,2,0)), 
+                            tumor_mask = data_cache[patient_name][1], 
+                            output_shape=(48, 48))
 
-        # 保存 cropped mask （黑白）
-        save_mask_slices_cv2(tumor_crop_mask, f"cropped_mask/{patient_name}", cropped_info['z_slices'])
-        save_cropped_img_plt(result, f"cropped_img/{patient_name}", cropped_info['z_slices'])
-        concatenate_img_and_mask(f"cropped_img/{patient_name}", f"cropped_mask/{patient_name}", f"concat_img_mask/{patient_name}", cropped_info['z_slices'])
-        # 保存 cropped 图像至 npz
-        os.makedirs('cropped_data', exist_ok=True)
-        np.savez(f'cropped_data/{patient_name}.npz', data=result)
-        print("cropped_info", cropped_info)
-        import json
-        os.makedirs('cropped_info', exist_ok=True)
-        with open(f'cropped_info/{patient_name}_info.json', 'w') as f:
-            json.dump(cropped_info, f, indent=4)
-    # except Exception as e:
-    #     print(f"Error load {patient_name}: {e}")
+            # 保存 cropped mask （黑白）
+            save_mask_slices_cv2(tumor_crop_mask, f"cropped_mask/{patient_name}", cropped_info['z_slices'])
+            save_cropped_img_plt(result, f"cropped_img/{patient_name}", cropped_info['z_slices'])
+            concatenate_img_and_mask(f"cropped_img/{patient_name}", f"cropped_mask/{patient_name}", f"concat_img_mask/{patient_name}", cropped_info['z_slices'])
+            # 保存 cropped 图像至 npz
+            os.makedirs('cropped_data', exist_ok=True)
+            np.savez(f'cropped_data/{patient_name}.npz', data=result)
+            print("cropped_info", cropped_info)
+            import json
+            os.makedirs('cropped_info', exist_ok=True)
+            with open(f'cropped_info/{patient_name}_info.json', 'w') as f:
+                json.dump(cropped_info, f, indent=4)
+        # except Exception as e:
+        #     print(f"Error load {patient_name}: {e}")
 
 
