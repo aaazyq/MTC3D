@@ -54,7 +54,7 @@ none = 1，则 level = 0，为低风险
 
 none = 空，则 level = 1，为高风险
 
-处理脚本：clean_data.py
+处理脚本：python clean_data.py
 
 ## 2. 模型训练
 
@@ -65,7 +65,11 @@ none = 空，则 level = 1，为高风险
 ![model](docs/model.png)
 
 
+训练脚本： python train.py
+
 ## 3. 模型评估指标
+
+推理脚本： python infer.py
 
 ### AUC
 
