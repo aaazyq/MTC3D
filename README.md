@@ -62,12 +62,14 @@ none = 空，则 level = 1，为高风险
 
 预测：label
 
-参考：
+![model](docs/model.png)
 
 
 ## 3. 模型评估指标
 
 ### AUC
+
+综合了 precision 和 recall，AUC 越大，模型的预测能力越好。
 
 ### Shap
 
